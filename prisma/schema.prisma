@@ -1,0 +1,229 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// This is your config file
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql" // Change to "mysql" or "sqlite" if needed
+  url      = env("DATABASE_URL")
+}
+
+// --------------------------------------
+// 1. Enums (Your Dropdown Options)
+// --------------------------------------
+
+enum Role {
+  CLUB
+  FACULTY_COORDINATOR
+  STAFF_IN_CHARGE
+  FACULTY_IN_CHARGE
+  HOD
+  ADMIN
+}
+
+enum VenueType {
+  LAB
+  HALL
+  CLASSROOM
+}
+
+enum HandlerRole {
+  STAFF_IN_CHARGE
+  FACULTY_IN_CHARGE
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN // Added based on your earlier requirement
+}
+
+// --------------------------------------
+// 2. User & Auth
+// --------------------------------------
+
+model User {
+  userId         Int       @id @default(autoincrement()) @map("user_id")
+  email          String    @unique
+  name           String
+  role           Role
+  profilePicture String?   @map("profile_picture")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // --- Relations ---
+  sessions          Session[]
+  
+  // A User can BE a Club (1:1)
+  clubProfile       Club?     @relation("UserProfile") 
+
+  // A User can COORDINATE many Clubs (Faculty Coordinator)
+  coordinatedClubs  Club[]    @relation("ClubCoordinator")
+
+  // A User can MANAGE venues (Staff/Faculty)
+  venueAssignments  VenueHandler[]
+
+  // A User can HOLD THE BALL for a booking
+  bookingsToHandle  Booking[] @relation("CurrentHandler")
+
+  // Audit Logs & Queries
+  performedActions  ActivityLog[]
+  sentQueries       Query[]   @relation("Sender")
+  receivedQueries   Query[]   @relation("Receiver")
+
+  @@map("users")
+}
+
+model Session {
+  sessionId    Int      @id @default(autoincrement()) @map("session_id")
+  userId       Int      @map("user_id")
+  refreshToken String   @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user         User     @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+// --------------------------------------
+// 3. Organization (Clubs & Venues)
+// --------------------------------------
+
+model Club {
+  // logic: club_id matches user_id (Inheritance)
+  clubId               Int      @id @map("club_id")
+  clubName             String   @map("club_name")
+  secretaryName        String   @map("secretary_name")
+  secretaryEmail       String   @map("secretary_email")
+  contactNumber        String   @map("contact_number")
+  facultyCoordinatorId Int      @map("faculty_coordinator_id")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user        User      @relation("UserProfile", fields: [clubId], references: [userId])
+  coordinator User      @relation("ClubCoordinator", fields: [facultyCoordinatorId], references: [userId])
+  bookings    Booking[]
+
+  @@map("clubs")
+}
+
+model Venue {
+  venueId     Int       @id @default(autoincrement()) @map("venue_id")
+  name        String
+  venueType   VenueType @map("venue_type")
+  location    String
+  capacity    Int
+  isAvailable Boolean   @default(true) @map("is_available")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  handlers    VenueHandler[]
+  pictures    Picture[]
+  bookings    Booking[]
+
+  @@map("venues")
+}
+
+model VenueHandler {
+  id        Int         @id @default(autoincrement())
+  venueId   Int         @map("venue_id")
+  handlerId Int         @map("handler_id")
+  role      HandlerRole
+  isActive  Boolean     @default(true) @map("is_active")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  venue     Venue       @relation(fields: [venueId], references: [venueId])
+  user      User        @relation(fields: [handlerId], references: [userId])
+
+  @@map("venue_handlers")
+}
+
+model Picture {
+  pictureId Int      @id @default(autoincrement()) @map("picture_id")
+  venueId   Int      @map("venue_id")
+  picture   String   // URL to image
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  venue     Venue    @relation(fields: [venueId], references: [venueId])
+
+  @@map("venue_pictures")
+}
+
+// --------------------------------------
+// 4. Booking Engine
+// --------------------------------------
+
+model Booking {
+  bookingId         Int           @id @default(autoincrement()) @map("booking_id")
+  clubId            Int           @map("club_id")
+  venueId           Int           @map("venue_id")
+  eventName         String        @map("event_name")
+  eventStart        DateTime      @map("event_start")
+  eventEnd          DateTime      @map("event_end")
+  status            BookingStatus @default(PENDING)
+  
+  // Workflow Logic
+  currentHandlerId  Int           @map("current_handler_id")
+  actionToken       String?       @map("action_token")
+  actionTokenExpiry DateTime?     @map("action_token_expiry")
+  
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  club            Club          @relation(fields: [clubId], references: [clubId])
+  venue           Venue         @relation(fields: [venueId], references: [venueId])
+  currentHandler  User          @relation("CurrentHandler", fields: [currentHandlerId], references: [userId])
+  logs            ActivityLog[]
+  
+  // Note: Queries are linked to users, but logically relate to bookings. 
+  // You can add `queries Query[]` here if you modify the Query model to include bookingId.
+
+  @@map("bookings")
+}
+
+model ActivityLog {
+  logId       Int      @id @default(autoincrement()) @map("log_id")
+  bookingId   Int      @map("booking_id")
+  action      String
+  performedBy Int      @map("performed_by")
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  booking     Booking  @relation(fields: [bookingId], references: [bookingId])
+  actor       User     @relation(fields: [performedBy], references: [userId])
+
+  @@map("activity_logs")
+}
+
+model Query {
+  queryId    Int      @id @default(autoincrement()) @map("query_id")
+  fromUserId Int      @map("from_user_id")
+  toUserId   Int      @map("to_user_id")
+  message    String
+  timestamp  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  fromUser   User     @relation("Sender", fields: [fromUserId], references: [userId])
+  toUser     User     @relation("Receiver", fields: [toUserId], references: [userId])
+
+  @@map("queries")
+}
