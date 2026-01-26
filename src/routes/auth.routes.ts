@@ -1,6 +1,7 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import passport from "passport";
-import '../config/passport.js';
+import '../config/passport.config.js';
 
 const authRouter = Router();
 
@@ -12,13 +13,24 @@ authRouter.get(
 authRouter.get(
     "/google/callback",
     passport.authenticate('google', {
-        failureRedirect: "/login-failure",
-        successRedirect: "/login-success",
+        failureRedirect: "/api/auth/login-failure",
+        successRedirect: "/api/auth/login-success",
+        session: false
     })
 )
 
-authRouter.get("/login-success", (req, res) => {
-    res.send("Login Successful");
+authRouter.get("/login-success", (req: Request, res: Response) => {
+    const payload = req.user as any;
+
+    const token = jwt.sign(
+        payload,
+        process.env.JWT_SECRET!,
+        { expiresIn: '1h' }
+    )
+
+    // TODO: Refresh token implementation
+
+    res.redirect(`${process.env.FRONTEND_URL}/login-success?token=${token}`);
 });
 
 authRouter.get("/login-failure", (req, res) => {

@@ -1,5 +1,6 @@
 import passport, { Profile } from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { Strategy as JwtStrategy, ExtractJwt } from 'passport-jwt';
 import { PrismaClient } from '../generated/prisma/client.js';
 import 'dotenv/config';
 
@@ -14,8 +15,6 @@ passport.use(
     },
     async (accessToken: String, refreshToken: String, profile: Profile, done) => {
       try {
-        console.debug('Google profile:', profile);
-
         const email = profile.emails?.[0].value;
         if (!email) {
           return done(new Error('No email found'), undefined);
@@ -23,6 +22,13 @@ passport.use(
 
         let user = await prisma.user.findUnique({
           where: { email },
+          select: {
+            userId: true,
+            email: true,
+            name: true,
+            role: true,
+            isActive: true,
+          }
         });
 
         if (!user) {
@@ -35,6 +41,7 @@ passport.use(
           return done(new Error('User is not active'), undefined);
         }
 
+        console.debug('Authenticated user:', user);
         return done(null, user);
       } catch (error) {
         return done(error as Error, undefined);
@@ -43,9 +50,21 @@ passport.use(
   )
 );
 
-// Required by Passport even if using JWT sessions
-passport.serializeUser((user: any, done) => done(null, user.userId));
-passport.deserializeUser(async (id: number, done) => {
-  const user = await prisma.user.findUnique({ where: { userId: id } });
-  done(null, user);
-});
+passport.use(
+  new JwtStrategy(
+    {
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: process.env.JWT_SECRET!,
+    },
+    
+    async (jwtPayload, done) => {
+      try {
+        const user = jwtPayload;
+
+        return done(null, user);
+      } catch (error) {
+        return done(error as Error, undefined);
+      }
+    }
+  )
+)
