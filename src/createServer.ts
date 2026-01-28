@@ -10,6 +10,7 @@ export function createServer() {
     app.get("/", (req, res) => {
         res.send("Hello, World!");
     });
+    app.use(express.json());
     app.use(cookieParser());
     app.use(indexRouter);
     return app;
