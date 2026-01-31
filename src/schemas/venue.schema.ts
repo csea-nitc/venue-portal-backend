@@ -24,5 +24,12 @@ export const updateVenueSchema = z.object({
     }),
 });
 
+export const venueIdSchema = z.object({
+    params: z.object({
+        venueId: z.string().regex(/^\d+$/).transform(Number),
+    }),
+});
+
 export type CreateVenueInput = z.infer<typeof createVenueSchema>;
 export type UpdateVenueInput = z.infer<typeof updateVenueSchema>;
+export type venueIdInput = z.infer<typeof venueIdSchema>;

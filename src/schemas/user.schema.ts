@@ -28,5 +28,12 @@ export const updateUserSchema = z.object({
     }),
 });
 
+export const userIdSchema = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/).transform(Number),
+    }),
+});
+
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type userIdInput = z.infer<typeof userIdSchema>;
