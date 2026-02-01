@@ -3,10 +3,10 @@ import { PrismaClient } from "../generated/prisma/client.js";
 
 const prisma = new PrismaClient();
 
-export const createAdmin = async (req: Request, res: Response) => {
+export const createUser = async (req: Request, res: Response) => {
     try {
         const { email, name, role, profilePicture, isActive } = req.body;
-        const newAdmin = await prisma.user.create({
+        const newUser = await prisma.user.create({
             data: {
                 email,
                 name,
@@ -17,8 +17,8 @@ export const createAdmin = async (req: Request, res: Response) => {
         });
 
         res.status(201).json({
-            message: "Admin created successfully",
-            newAdmin,
+            message: "User created successfully",
+            user: newUser,
         });
     } catch (error: any) {
         if (error.code === "P2002") {
@@ -30,15 +30,15 @@ export const createAdmin = async (req: Request, res: Response) => {
             });
         }
         res.status(500).json({
-            error: "Failed to create Admin",
+            error: "Failed to create user",
             details: error.message,
         });
     }
 };
 
-export const getAllAdmins = async (req: Request, res: Response) => {
+export const getAllUsers = async (req: Request, res: Response) => {
     try {
-        const Admins = await prisma.user.findMany({
+        const users = await prisma.user.findMany({
             select: {
                 userId: true,
                 email: true,
@@ -51,20 +51,20 @@ export const getAllAdmins = async (req: Request, res: Response) => {
             },
         });
 
-        res.status(200).json({ Admins });
+        res.status(200).json({ users });
     } catch (error: any) {
         res.status(500).json({
-            error: "Failed To get Admins",
+            error: "Failed to get users",
             details: error.message,
         });
     }
 };
 
-export const getAdminById = async (req: Request, res: Response) => {
+export const getUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
 
-        const Admin = await prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { userId: Number(userId) },
             include: {
                 clubProfile: true,
@@ -77,20 +77,20 @@ export const getAdminById = async (req: Request, res: Response) => {
             },
         });
 
-        if (!Admin) {
-            return res.status(404).json({ error: "Admin not found" });
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
         }
 
-        res.status(200).json({ Admin });
+        res.status(200).json({ user });
     } catch (error: any) {
         res.status(500).json({
-            error: "Failed to fetch Admin",
+            error: "Failed to fetch user",
             details: error.message,
         });
     }
 };
 
-export const updateAdminById = async (req: Request, res: Response) => {
+export const updateUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
         const { name, role, profilePicture, isActive } = req.body;
@@ -102,36 +102,36 @@ export const updateAdminById = async (req: Request, res: Response) => {
             updates.profilePicture = profilePicture;
         if (isActive !== undefined) updates.isActive = isActive;
 
-        const Admin = await prisma.user.update({
+        const user = await prisma.user.update({
             where: { userId: Number(userId) },
             data: updates,
         });
 
-        res.status(200).json({ message: "Admin updated successfully", Admin });
+        res.status(200).json({ message: "User updated successfully", user });
     } catch (error: any) {
         if (error.code === "P2025") {
-            return res.status(404).json({ error: "Admin not found" });
+            return res.status(404).json({ error: "User not found" });
         }
         res.status(500).json({
-            error: "Failed to update Admin",
+            error: "Failed to update user",
             details: error.message,
         });
     }
 };
 
-export const deleteAdminById = async (req: Request, res: Response) => {
+export const deleteUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
         await prisma.user.delete({
             where: { userId: Number(userId) },
         });
-        res.status(200).json({ message: "Admin deleted successfully" });
+        res.status(200).json({ message: `User ${userId} deleted successfully` });
     } catch (error: any) {
         if (error.code === "P2025") {
-            return res.status(404).json({ error: "Admin not found" });
+            return res.status(404).json({ error: "User not found" });
         }
         res.status(500).json({
-            error: "Failed to delete Admin",
+            error: "Failed to delete user",
             details: error.message,
         });
     }

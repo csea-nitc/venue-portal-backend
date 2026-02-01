@@ -17,6 +17,7 @@ authRouter.get(
     (req: Request, res: Response, next: NextFunction) => {
         passport.authenticate('google', { session: false }, async (err, user) => {
             if (err || !user) {
+                console.log(err)
                 return res.redirect(`${process.env.FRONTEND_URL}/api/auth/login-failure`);
             }
 

@@ -14,8 +14,12 @@ import {
 import * as userController from "../controllers/admin.user.controller.js";
 import * as venueController from "../controllers/admin.venue.controller.js";
 import { Role } from "../generated/prisma/enums.js";
+import authenticator from "../middlewares/auth.middleware.js";
+
+
 const adminRouter = Router();
 
+adminRouter.use(authenticator);
 adminRouter.use(authorizeRoles(Role.ADMIN));
 
 adminRouter.get("/dashboard", (req, res) => {
@@ -23,25 +27,25 @@ adminRouter.get("/dashboard", (req, res) => {
 });
 
 adminRouter.post(
-    "/admin",
+    "/users",
     validate(createUserSchema as any),
-    userController.createAdmin,
+    userController.createUser,
 );
-adminRouter.get("/admin", userController.getAllAdmins);
+adminRouter.get("/users", userController.getAllUsers);
 adminRouter.get(
-    "/admin/:userId",
+    "/users/:userId",
     validate(userIdSchema as any),
-    userController.getAdminById,
+    userController.getUserById,
 );
 adminRouter.put(
-    "/admin/:userId",
+    "/users/:userId",
     validate(userIdSchema.merge(updateUserSchema) as any),
-    userController.updateAdminById,
+    userController.updateUserById,
 );
 adminRouter.delete(
-    "/admin/:userId",
+    "/users/:userId",
     validate(userIdSchema as any),
-    userController.deleteAdminById,
+    userController.deleteUserById,
 );
 
 adminRouter.post(
