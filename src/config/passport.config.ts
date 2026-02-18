@@ -20,7 +20,7 @@ passport.use(
           return done(new Error('No email found'), undefined);
         }
 
-        let user = await prisma.user.findUnique({
+        let user: Express.User = await prisma.user.findUnique({
           where: { email },
           select: {
             userId: true,
