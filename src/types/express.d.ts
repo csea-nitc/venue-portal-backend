@@ -1,15 +1,14 @@
-import { Request } from 'express';
-import { Role } from '../generated/prisma/enums.ts';
+import { Role } from '../generated/prisma/enums.js';
 
 declare global {
-    namespace Express {
-        interface Request {
-            user?: {
-                userId: string;
-                email: string;
-                name: string;
-                role: Role;
-            };
-        }
+  namespace Express {
+    interface User {
+      userId: string;
+      email: string;
+      name: string;
+      role: Role;
     }
+  }
 }
+
+export {};

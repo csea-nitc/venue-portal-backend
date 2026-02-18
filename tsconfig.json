@@ -10,6 +10,10 @@
     "module": "nodenext",
     "target": "es2022",
     "types": ["node"],
+    "typeRoots": [
+      "./src/types",
+      "./node_modules/@types"
+    ],
     "lib": ["ES2022"],
     // For nodejs:
     // "lib": ["esnext"],
@@ -41,5 +45,9 @@
     // "noUncheckedSideEffectImports": true,
     // "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+  "include": [
+    "src/types/express.d.ts",
+    "src/**/*"
+  ]
 }
