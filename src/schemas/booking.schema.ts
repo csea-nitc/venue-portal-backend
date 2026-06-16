@@ -6,6 +6,7 @@ export const createBookingSchema = z.object({
   eventStart: z.coerce.date(),
   eventEnd: z.coerce.date(),
   remarks: z.string().max(1000).optional(),
+    initialHandlerId: z.number().int().positive().optional(), 
 }).refine(data => data.eventEnd > data.eventStart, {
   message: "Event end must be after start",
 });

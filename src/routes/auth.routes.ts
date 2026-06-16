@@ -73,7 +73,7 @@ authRouter.get("/login-failure", (req, res) => {
     res.send("Login Failed");
 });
 
-authRouter.get("/refresh", (req: Request, res: Response) => {
+authRouter.get("/refresh",  (req: Request, res: Response) => {
     const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
@@ -121,7 +121,7 @@ authRouter.get("/refresh", (req: Request, res: Response) => {
         }
     );
 
-    return res.status(200);
+    // return res.status(200); sync code error
 });
 
 
