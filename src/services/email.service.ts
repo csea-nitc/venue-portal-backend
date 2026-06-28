@@ -1,8 +1,34 @@
 import nodemailer from 'nodemailer';
 
-// ---------------------------------------------------------------------------
-// Config & transporter
-// ---------------------------------------------------------------------------
+/*SETUP .env variables 
+EMAIL_HOST = smtp.gmail.com  
+EMAIL_PORT = 587
+EMAIL_SECURE=false
+
+I assume we use CSEA mail for this
+
+EMAIL_USER 
+EMAIL_PASS 
+EMAIL_FROM_NAME 
+EMAIL_FROM_ADDRESS
+
+sendHandlerAssignedEmail(faculty email, faculty name, data) => send the  email to faculty once the club has made their request
+sendBookingApprovedEmail,sendBookingRejectedEmail => send email to club when their request is accepted or rejected
+sendBookingSubmittedEmail => just a confirmation email sent to the club that they have successfully submitted their request
+
+data = {
+  bookingId,
+  eventName,
+  venueName,
+  eventStart,
+  eventEnd,
+  clubName,
+  portalUrl (we can add a button to allow the person reading the mail, to be redirected to our site), 
+} 
+
+*/
+
+
 
 function parsePort(raw: string | undefined): number {
   const port = parseInt(raw ?? '587', 10);
