@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { addEmailJob, type EmailJobResult } from '../queues/email.queue.js';
 
 /*SETUP .env variables 
 EMAIL_HOST = smtp.gmail.com  
@@ -284,7 +285,7 @@ export interface BookingEmailData {
 export async function sendBookingSubmittedEmail(
   clubEmail: string,
   data: BookingEmailData,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       Your booking request has been successfully submitted and is now <strong>pending review</strong>.
@@ -303,7 +304,7 @@ export async function sendBookingSubmittedEmail(
     ${data.portalUrl ? actionButton('View Booking', `${data.portalUrl}/bookings/${data.bookingId}`) : ''}
   `;
 
-  return sendEmail({
+  return addEmailJob('booking-submitted', {
     to: clubEmail,
     subject: `Booking Submitted — ${data.eventName} (#${data.bookingId})`,
     html: wrapInLayout('Booking Request Submitted', body),
@@ -318,7 +319,7 @@ export async function sendHandlerAssignedEmail(
   handlerEmail: string,
   handlerName: string,
   data: BookingEmailData,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       Hi <strong>${handlerName}</strong>,
@@ -340,7 +341,7 @@ export async function sendHandlerAssignedEmail(
     ${data.portalUrl ? actionButton('Review Booking', `${data.portalUrl}/bookings/${data.bookingId}`) : ''}
   `;
 
-  return sendEmail({
+  return addEmailJob('handler-assigned', {
     to: handlerEmail,
     subject: `Action Required — Booking #${data.bookingId}: ${data.eventName}`,
     html: wrapInLayout('New Booking Requires Your Review', body),
@@ -355,7 +356,7 @@ export async function sendBookingApprovedEmail(
   clubEmail: string,
   data: BookingEmailData,
   approverName: string,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       Great news! Your booking request has been <strong style="color:#16a34a;">approved</strong>.
@@ -374,7 +375,7 @@ export async function sendBookingApprovedEmail(
     ${data.portalUrl ? actionButton('View Booking', `${data.portalUrl}/bookings/${data.bookingId}`) : ''}
   `;
 
-  return sendEmail({
+  return addEmailJob('booking-approved', {
     to: clubEmail,
     subject: `✅ Booking Approved — ${data.eventName} (#${data.bookingId})`,
     html: wrapInLayout('Booking Approved', body),
@@ -390,7 +391,7 @@ export async function sendBookingRejectedEmail(
   data: BookingEmailData,
   rejectorName: string,
   reason?: string,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       Unfortunately, your booking request has been <strong style="color:#dc2626;">rejected</strong>.
@@ -410,7 +411,7 @@ export async function sendBookingRejectedEmail(
     ${data.portalUrl ? actionButton('Submit New Request', `${data.portalUrl}/bookings/new`) : ''}
   `;
 
-  return sendEmail({
+  return addEmailJob('booking-rejected', {
     to: clubEmail,
     subject: `❌ Booking Rejected — ${data.eventName} (#${data.bookingId})`,
     html: wrapInLayout('Booking Rejected', body),
@@ -426,7 +427,7 @@ export async function sendBookingCancelledEmail(
   data: BookingEmailData,
   cancelledBy: string,
   reason?: string,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       The following booking has been <strong style="color:#d97706;">cancelled</strong>.
@@ -446,7 +447,7 @@ export async function sendBookingCancelledEmail(
     </p>
   `;
 
-  return sendEmail({
+  return addEmailJob('booking-cancelled', {
     to: recipients,
     subject: `Booking Cancelled — ${data.eventName} (#${data.bookingId})`,
     html: wrapInLayout('Booking Cancelled', body),
@@ -460,7 +461,7 @@ export async function sendBookingCancelledEmail(
 export async function sendBookingWithdrawnEmail(
   handlerEmail: string,
   data: BookingEmailData,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       The booking listed below has been <strong>withdrawn</strong> by <strong>${data.clubName}</strong>.
@@ -476,7 +477,7 @@ export async function sendBookingWithdrawnEmail(
     ])}
   `;
 
-  return sendEmail({
+  return addEmailJob('booking-withdrawn', {
     to: handlerEmail,
     subject: `Booking Withdrawn — ${data.eventName} (#${data.bookingId})`,
     html: wrapInLayout('Booking Withdrawn', body),
@@ -491,7 +492,7 @@ export async function sendBookingReminderEmail(
   handlerEmail: string,
   handlerName: string,
   data: BookingEmailData,
-): Promise<SendEmailResult> {
+): Promise<EmailJobResult> {
   const body = `
     <p style="font-size:14px;color:#3f3f46;line-height:1.6;">
       Hi <strong>${handlerName}</strong>,
@@ -513,7 +514,7 @@ export async function sendBookingReminderEmail(
     ${data.portalUrl ? actionButton('Review Now', `${data.portalUrl}/bookings/${data.bookingId}`) : ''}
   `;
 
-  return sendEmail({
+  return addEmailJob('booking-reminder', {
     to: handlerEmail,
     subject: `⏰ Reminder — Booking #${data.bookingId} Awaiting Review`,
     html: wrapInLayout('Pending Booking Reminder', body),
