@@ -2,6 +2,13 @@ import { Request, Response } from "express";
 import { PrismaClient, BookingStatus } from "../generated/prisma/client.js";
 import { getApprovedConflict } from "../services/booking.service.js";
 import { WorkflowService } from "../services/workflow.service.js";
+import {
+  sendBookingSubmittedEmail,
+  sendHandlerAssignedEmail,
+  sendBookingApprovedEmail,
+  sendBookingRejectedEmail,
+  BookingEmailData
+} from "../services/email.service.js";
 
 const prisma = new PrismaClient();
 
@@ -55,6 +62,31 @@ export const createBooking = async (req: Request, res: Response) => {
       }
     });
 
+    // --- EMAIL NOTIFICATION ---
+    try {
+      const clubUser = await prisma.user.findUnique({ where: { userId: clubId } });
+      const handlerUser = await prisma.user.findUnique({ where: { userId: handlerId } });
+      const venue = await prisma.venue.findUnique({ where: { venueId } });
+
+      if (clubUser && handlerUser && venue) {
+        const emailData: BookingEmailData = {
+          bookingId: booking.bookingId,
+          eventName: booking.eventName,
+          venueName: venue.name,
+          eventStart: booking.eventStart,
+          eventEnd: booking.eventEnd,
+          clubName: clubUser.name,
+          portalUrl: process.env.FRONTEND_URL || "http://localhost:3000"
+        };
+        
+        await sendBookingSubmittedEmail(clubUser.email, emailData);
+        await sendHandlerAssignedEmail(handlerUser.email, handlerUser.name, emailData);
+      }
+    } catch (emailErr) {
+      console.error("Failed to enqueue emails for createBooking:", emailErr);
+    }
+    // --------------------------
+
     return res.status(201).json({ success: true, data: booking });
 
   } catch (error: any) {
@@ -70,6 +102,50 @@ export const approveBooking = async (req: Request, res: Response) => {
 
   try {
     const result = await WorkflowService.approveBooking(Number(id), approverId, remarks);
+
+    // --- EMAIL NOTIFICATION ---
+    try {
+      const bookingInfo = await prisma.booking.findUnique({
+        where: { bookingId: Number(id) },
+        include: {
+          club: { include: { user: true } },
+          venue: true,
+          currentHandlers: { include: { handler: true } }
+        }
+      });
+
+      if (bookingInfo) {
+        const emailData: BookingEmailData = {
+          bookingId: bookingInfo.bookingId,
+          eventName: bookingInfo.eventName,
+          venueName: bookingInfo.venue.name,
+          eventStart: bookingInfo.eventStart,
+          eventEnd: bookingInfo.eventEnd,
+          clubName: bookingInfo.club.user.name,
+          portalUrl: process.env.FRONTEND_URL || "http://localhost:3000"
+        };
+
+        if (result.status === BookingStatus.APPROVED) {
+          const approver = await prisma.user.findUnique({ where: { userId: approverId } });
+          await sendBookingApprovedEmail(
+            bookingInfo.club.user.email,
+            emailData,
+            approver?.name || "App Team"
+          );
+        } else if (
+          result.status === BookingStatus.PENDING_VENUE_HANDLER ||
+          result.status === BookingStatus.PENDING_HOD
+        ) {
+          for (const ch of bookingInfo.currentHandlers) {
+            await sendHandlerAssignedEmail(ch.handler.email, ch.handler.name, emailData);
+          }
+        }
+      }
+    } catch (emailErr) {
+      console.error("Failed to enqueue emails for approveBooking:", emailErr);
+    }
+    // --------------------------
+
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
@@ -83,6 +159,41 @@ export const rejectBooking = async (req: Request, res: Response) => {
 
   try {
     const result = await WorkflowService.rejectBooking(Number(id), rejecterId, reason);
+
+    // --- EMAIL NOTIFICATION ---
+    try {
+      const bookingInfo = await prisma.booking.findUnique({
+        where: { bookingId: Number(id) },
+        include: {
+          club: { include: { user: true } },
+          venue: true
+        }
+      });
+
+      if (bookingInfo) {
+        const emailData: BookingEmailData = {
+          bookingId: bookingInfo.bookingId,
+          eventName: bookingInfo.eventName,
+          venueName: bookingInfo.venue.name,
+          eventStart: bookingInfo.eventStart,
+          eventEnd: bookingInfo.eventEnd,
+          clubName: bookingInfo.club.user.name,
+          portalUrl: process.env.FRONTEND_URL || "http://localhost:3000"
+        };
+        const rejecter = await prisma.user.findUnique({ where: { userId: rejecterId } });
+
+        await sendBookingRejectedEmail(
+          bookingInfo.club.user.email,
+          emailData,
+          rejecter?.name || "App Team",
+          reason
+        );
+      }
+    } catch (emailErr) {
+      console.error("Failed to enqueue emails for rejectBooking:", emailErr);
+    }
+    // --------------------------
+
     return res.json({ success: true, data: result });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
