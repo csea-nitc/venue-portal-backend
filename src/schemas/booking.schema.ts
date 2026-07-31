@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+const bookingListRoleSchema = z.enum([
+  "CLUB",
+  "FACULTY_COORDINATOR",
+  "STAFF_IN_CHARGE",
+  "FACULTY_IN_CHARGE",
+  "HOD",
+  "ADMIN",
+]);
+
 export const createBookingSchema = z.object({
   body: z.object({
     venueId: z.number().int().positive(),
@@ -47,6 +56,12 @@ export const rejectBookingSchema = z.object({
   params: z.object({
     id: z.string().regex(/^\d+$/).transform(Number),
   })
+});
+
+export const listBookingsQuerySchema = z.object({
+  query: z.object({
+    role: bookingListRoleSchema,
+  }),
 });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>["body"];

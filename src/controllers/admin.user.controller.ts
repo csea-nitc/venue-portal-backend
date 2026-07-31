@@ -10,7 +10,9 @@ export const createUser = async (req: Request, res: Response) => {
             data: {
                 email,
                 name,
-                role,
+                roles: {
+                    create: role.map((userRole: string) => ({ role: userRole })),
+                },
                 profilePicture,
                 isActive,
             },
@@ -43,7 +45,11 @@ export const getAllUsers = async (req: Request, res: Response) => {
                 userId: true,
                 email: true,
                 name: true,
-                role: true,
+                roles: {
+                    select: {
+                        role: true,
+                    },
+                },
                 profilePicture: true,
                 isActive: true,
                 createdAt: true,
@@ -67,6 +73,11 @@ export const getUserById = async (req: Request, res: Response) => {
         const user = await prisma.user.findUnique({
             where: { userId: Number(userId) },
             include: {
+                roles: {
+                    select: {
+                        role: true,
+                    },
+                },
                 clubProfile: true,
                 coordinatedClubs: true,
                 venueAssignments: {
@@ -93,11 +104,18 @@ export const getUserById = async (req: Request, res: Response) => {
 export const updateUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
-        const { name, role, profilePicture, isActive } = req.body;
+        const { name, roles, profilePicture, isActive } = req.body;
+
+        console.log("Update User Request Body:", req.body); // Debugging line
 
         const updates: any = {};
         if (name !== undefined) updates.name = name;
-        if (role !== undefined) updates.role = role;
+        if (roles !== undefined) {
+            updates.roles = {
+                deleteMany: {},
+                create: roles.map((userRole: string) => ({ role: userRole })),
+            };
+        }
         if (profilePicture !== undefined)
             updates.profilePicture = profilePicture;
         if (isActive !== undefined) updates.isActive = isActive;

@@ -8,7 +8,14 @@ export const getAllLogs = async (req: Request, res: Response) => {
     const logs = await prisma.activityLog.findMany({
       include: {
         actor: {
-          select: { userId: true, name: true, email: true, role: true }
+          select: {
+            userId: true,
+            name: true,
+            email: true,
+            roles: {
+              select: { role: true }
+            }
+          }
         },
         booking: {
           select: { bookingId: true, eventName: true }
@@ -29,7 +36,14 @@ export const getBookingLogs = async (req: Request, res: Response) => {
       where: { bookingId: Number(bookingId) },
       include: {
         actor: {
-          select: { userId: true, name: true, email: true, role: true }
+          select: {
+            userId: true,
+            name: true,
+            email: true,
+            roles: {
+              select: { role: true }
+            }
+          }
         }
       },
       orderBy: { timestamp: "asc" }

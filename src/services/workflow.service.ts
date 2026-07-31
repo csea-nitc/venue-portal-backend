@@ -1,6 +1,14 @@
 import { PrismaClient, BookingStatus } from "../generated/prisma/client.js";
+import { Role } from "../generated/prisma/enums.js";
 
 const prisma = new PrismaClient();
+
+const pendingStatuses: BookingStatus[] = [
+  BookingStatus.PENDING_COORDINATOR,
+  BookingStatus.PENDING_STAFF,
+  BookingStatus.PENDING_FACULTY,
+  BookingStatus.PENDING_HOD
+];
 
 export class WorkflowService {
 	static async approveBooking(
@@ -21,12 +29,7 @@ export class WorkflowService {
 				throw new Error("Booking not found.");
 			}
 
-			const isPending = ([
-				BookingStatus.PENDING_COORDINATOR,
-				BookingStatus.PENDING_VENUE_HANDLER,
-				BookingStatus.PENDING_HOD
-			] as BookingStatus[]).includes(booking.status);
-
+			const isPending = pendingStatuses.includes(booking.status);
 			if (!isPending) {
 				throw new Error("Booking is already processed or cancelled.");
 			}
@@ -36,34 +39,24 @@ export class WorkflowService {
 				throw new Error("You are not authorized to approve this request at the current stage.");
 			}
 
-			const user = await tx.user.findUnique({ where: { userId: approverId } });
-			if (!user) {
-				throw new Error("Approver user not found.");
-			}
-
-			// Role validation based on status
-			if (booking.status === BookingStatus.PENDING_COORDINATOR) {
-				if (user.role !== "FACULTY_COORDINATOR" && user.role !== "ADMIN") {
-					throw new Error("Only a Faculty Coordinator or Admin can approve this request at this stage.");
-				}
-			} else if (booking.status === BookingStatus.PENDING_VENUE_HANDLER) {
-				if (
-					user.role !== "FACULTY_IN_CHARGE" &&
-					user.role !== "STAFF_IN_CHARGE" &&
-					user.role !== "ADMIN"
-				) {
-					throw new Error("Only a Venue Handler (Faculty/Staff In-Charge) or Admin can approve this request at this stage.");
-				}
-			} else if (booking.status === BookingStatus.PENDING_HOD) {
-				if (user.role !== "HOD" && user.role !== "ADMIN") {
-					throw new Error("Only the HOD or Admin can approve this request at this stage.");
-				}
-			}
+			// We need name of the approver for logging purposes
+			const user = await tx.user.findUnique({
+				where: { userId: approverId },
+			});
 
 			const venueHandlers = await tx.venueHandler.findMany({
 				where: { venueId: booking.venueId, isActive: true },
-				include: { user: true },
+				include: { 
+					user: {
+						include: {
+							roles: true
+						}
+					}
+				},
 			});
+
+			const staffs = venueHandlers.filter((vh) => vh.user.roles.some((role) => role.role === Role.STAFF_IN_CHARGE));
+			const faculties = venueHandlers.filter((vh) => vh.user.roles.some((role) => role.role === Role.FACULTY_IN_CHARGE));
 
 			if (booking.status === BookingStatus.PENDING_COORDINATOR) {
 				if (venueHandlers.length === 0) {
@@ -77,35 +70,19 @@ export class WorkflowService {
 					where: { bookingId },
 				});
 
-				// 2. Assign to the chosen venue handler if set, otherwise assign to all active venue handlers
-				if (booking.initialHandlerId) {
-					const hasSelectedHandler = venueHandlers.some(
-						(vh) => vh.handlerId === booking.initialHandlerId,
-					);
-					if (!hasSelectedHandler) {
-						throw new Error(
-							"The venue handler selected by the student is no longer active for this venue.",
-						);
-					}
-
-					await tx.bookingHandler.create({
-						data: {
-							bookingId,
-							handlerId: booking.initialHandlerId,
-						},
-					});
-				} else {
-					await tx.bookingHandler.createMany({
-						data: venueHandlers.map((vh) => ({
-							bookingId,
-							handlerId: vh.handlerId,
-						})),
-					});
-				}
-
+				// 2. Assign to all active venue staff in charge
+				await tx.bookingHandler.createMany({
+					data: staffs.map((s) => ({
+						bookingId,
+						handlerId: s.handlerId,
+						handlerRole: Role.STAFF_IN_CHARGE
+					})),
+				});
+				
+				// 3. Update status to PENDING_STAFF
 				const updatedBooking = await tx.booking.update({
 					where: { bookingId },
-					data: { status: BookingStatus.PENDING_VENUE_HANDLER },
+					data: { status: BookingStatus.PENDING_STAFF },
 				});
 
 				await tx.activityLog.create({
@@ -120,27 +97,94 @@ export class WorkflowService {
 				return updatedBooking;
 			}
 
-			if (booking.status === BookingStatus.PENDING_VENUE_HANDLER) {
-				const requireHODApproval = process.env.REQUIRE_HOD_APPROVAL === "true";
+			// Conflict check used by two of the below cases
+			const conflict = await tx.booking.findFirst({
+				where: {
+					venueId: booking.venueId,
+					status: BookingStatus.APPROVED,
+					NOT: { bookingId },
+					AND: [
+						{ eventStart: { lt: booking.eventEnd } },
+						{ eventEnd: { gt: booking.eventStart } },
+					],
+				},
+			});
 
-				if (requireHODApproval) {
-					const hod = await tx.user.findFirst({
-						where: { role: "HOD", isActive: true },
-					});
-					if (!hod)
-						throw new Error("HOD approval required, but no active HOD found.");
+			if (booking.status === BookingStatus.PENDING_STAFF) {
+				if (conflict) {
+					throw new Error("CONFLICT: Another request for this venue and time was just approved.");
+				}
 
-					await tx.bookingHandler.deleteMany({
-						where: { bookingId },
-					});
+				// 1. Clear current handlers
+				await tx.bookingHandler.deleteMany({
+					where: { bookingId },
+				});
 
-					await tx.bookingHandler.create({
-						data: {
-							bookingId,
-							handlerId: hod.userId,
+				// 2. Assign to all active venue faculty in charge
+				await tx.bookingHandler.createMany({
+					data: faculties.map((s) => ({
+						bookingId,
+						handlerId: s.handlerId,
+						handlerRole: Role.FACULTY_IN_CHARGE
+					})),
+				});
+
+				// 3. Update status to PENDING_FACULTY
+				const updatedBooking = await tx.booking.update({
+					where: { bookingId },
+					data: { status: BookingStatus.PENDING_FACULTY },
+				});
+
+				await tx.activityLog.create({
+					data: {
+						bookingId,
+						performedBy: approverId,
+						action: `APPROVED BY STAFF IN-CHARGE: ${user.name}. Remarks: ${remarks}`,
+						timestamp: new Date(),
+					},
+				});
+
+				return updatedBooking;
+			}
+
+			if (booking.status === BookingStatus.PENDING_FACULTY) {
+				if (conflict) {
+					throw new Error("CONFLICT: Another request for this venue and time was just approved.");
+				}
+
+				const requireHodApproval = process.env.REQUIRE_HOD_APPROVAL === "true";
+
+				// 1. Clear current handlers
+				await tx.bookingHandler.deleteMany({
+					where: { bookingId },
+				});
+
+				if (requireHodApproval) {
+					const hod = await tx.user.findMany({
+						where: { 
+							roles: { 
+								some: { 
+									role: Role.HOD 
+								} 
+							}, 
+							isActive: true 
 						},
 					});
 
+					if(!hod) {
+						throw new Error("No HOD found to forward the request to. Approval halted.");
+					}
+
+					// 2. Assign to HOD
+					await tx.bookingHandler.create({
+						data: {
+							bookingId,
+							handlerId: hod[0].userId,
+							handlerRole: Role.HOD
+						}
+					});
+
+					// 3. Update status to PENDING_HOD
 					const updatedBooking = await tx.booking.update({
 						where: { bookingId },
 						data: { status: BookingStatus.PENDING_HOD },
@@ -150,34 +194,15 @@ export class WorkflowService {
 						data: {
 							bookingId,
 							performedBy: approverId,
-							action: `APPROVED BY VENUE HANDLER: ${user.name}. Forwarded to HOD. Remarks: ${remarks}`,
+							action: `APPROVED BY FACULTY IN-CHARGE: ${user.name}. Forwarded to HOD. Remarks: ${remarks}`,
 							timestamp: new Date(),
 						},
 					});
 
 					return updatedBooking;
-				} else {
-					// Final approval: check double booking conflict
-					const conflict = await tx.booking.findFirst({
-						where: {
-							venueId: booking.venueId,
-							status: BookingStatus.APPROVED,
-							NOT: { bookingId },
-							AND: [
-								{ eventStart: { lt: booking.eventEnd } },
-								{ eventEnd: { gt: booking.eventStart } },
-							],
-						},
-					});
-					if (conflict) {
-						throw new Error("CONFLICT: Another request for this venue and time was just approved.");
-					}
-
-					// 1. Clear current handlers
-					await tx.bookingHandler.deleteMany({
-						where: { bookingId },
-					});
-
+				}
+				else {
+					// HOD approval not required, so we can directly approve the booking
 					// 2. Update status to APPROVED
 					const updatedBooking = await tx.booking.update({
 						where: { bookingId },
@@ -188,7 +213,7 @@ export class WorkflowService {
 						data: {
 							bookingId,
 							performedBy: approverId,
-							action: `FINAL APPROVAL BY VENUE HANDLER: ${user.name}. Remarks: ${remarks}`,
+							action: `APPROVED BY FACULTY IN-CHARGE: ${user.name}. Remarks: ${remarks}`,
 							timestamp: new Date(),
 						},
 					});
@@ -196,20 +221,9 @@ export class WorkflowService {
 					return updatedBooking;
 				}
 			}
+		
 
 			if (booking.status === BookingStatus.PENDING_HOD) {
-				// Final approval: check double booking conflict
-				const conflict = await tx.booking.findFirst({
-					where: {
-						venueId: booking.venueId,
-						status: BookingStatus.APPROVED,
-						NOT: { bookingId },
-						AND: [
-							{ eventStart: { lt: booking.eventEnd } },
-							{ eventEnd: { gt: booking.eventStart } },
-						],
-					},
-				});
 				if (conflict) {
 					throw new Error("CONFLICT: Another request for this venue and time was just approved.");
 				}
@@ -258,11 +272,7 @@ export class WorkflowService {
 				throw new Error("Booking not found.");
 			}
 
-			const isPending = ([
-				BookingStatus.PENDING_COORDINATOR,
-				BookingStatus.PENDING_VENUE_HANDLER,
-				BookingStatus.PENDING_HOD
-			] as BookingStatus[]).includes(booking.status);
+			const isPending = pendingStatuses.includes(booking.status);
 
 			if (!isPending) {
 				throw new Error("Booking is already processed or cancelled.");
@@ -273,35 +283,17 @@ export class WorkflowService {
 				throw new Error("You are not authorized to reject this request.");
 			}
 
-			const rejecterUser = await tx.user.findUnique({ where: { userId: rejecterId } });
-			if (!rejecterUser) {
-				throw new Error("Rejecter user not found.");
-			}
+			// We need name of the rejecter for logging purposes
+			const user = await tx.user.findUnique({
+				where: { userId: rejecterId },
+			});
 
-			// Role validation based on status
-			if (booking.status === BookingStatus.PENDING_COORDINATOR) {
-				if (rejecterUser.role !== "FACULTY_COORDINATOR" && rejecterUser.role !== "ADMIN") {
-					throw new Error("Only a Faculty Coordinator or Admin can reject this request at this stage.");
-				}
-			} else if (booking.status === BookingStatus.PENDING_VENUE_HANDLER) {
-				if (
-					rejecterUser.role !== "FACULTY_IN_CHARGE" &&
-					rejecterUser.role !== "STAFF_IN_CHARGE" &&
-					rejecterUser.role !== "ADMIN"
-				) {
-					throw new Error("Only a Venue Handler (Faculty/Staff In-Charge) or Admin can reject this request at this stage.");
-				}
-			} else if (booking.status === BookingStatus.PENDING_HOD) {
-				if (rejecterUser.role !== "HOD" && rejecterUser.role !== "ADMIN") {
-					throw new Error("Only the HOD or Admin can reject this request at this stage.");
-				}
-			}
-
-			// Clear current handlers
+			// 1. Clear current handlers
 			await tx.bookingHandler.deleteMany({
 				where: { bookingId },
 			});
 
+			// 2. Update status to REJECTED
 			const updatedBooking = await tx.booking.update({
 				where: { bookingId },
 				data: { status: BookingStatus.REJECTED },
@@ -311,7 +303,7 @@ export class WorkflowService {
 				data: {
 					bookingId,
 					performedBy: rejecterId,
-					action: `REJECTED BY ${rejecterUser.name}: ${reason}`,
+					action: `REJECTED BY ${user.name}: ${reason}`,
 					timestamp: new Date(),
 				},
 			});

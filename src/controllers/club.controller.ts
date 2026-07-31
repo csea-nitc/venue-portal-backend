@@ -53,13 +53,22 @@ export const createClub = async (req: Request, res: Response) => {
                 data: {
                     email: secretaryEmail,
                     name: clubName,
-                    role: "CLUB",
+                    roles: {
+                        create: {
+                            role: "CLUB",
+                        },
+                    },
                     isActive: true
                 }
             });
         } else {
             // If user exists, make sure they have role CLUB
-            if (user.role !== "CLUB") {
+            const userRoles = await prisma.userRole.findMany({
+                where: { userId: user.userId },
+                select: { role: true },
+            });
+
+            if (!userRoles.some((userRole) => userRole.role === "CLUB")) {
                 return res.status(400).json({ success: false, message: "A user with this email already exists with a different role." });
             }
         }
@@ -162,10 +171,14 @@ export const deleteClub = async (req: Request, res: Response) => {
 
 export const getMyClubProfile = async (req: Request, res: Response) => {
     try {
-        const userId = (req.user as any).userId;
-        const role = (req.user as any).role;
+        const userId = req.user?.userId;
+        const role = req.user?.role ?? [];
 
-        if (role !== 'CLUB') {
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthorized" });
+        }
+
+        if (!role.includes('CLUB')) {
             return res.status(403).json({ success: false, message: "Only club accounts can access this." });
         }
 

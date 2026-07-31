@@ -100,7 +100,11 @@ authRouter.get("/refresh", (req: Request, res: Response) => {
                             userId: true,
                             email: true,
                             name: true,
-                            role: true
+                            roles: {
+                                select: {
+                                    role: true
+                                }
+                            }
                         }
                     }
                 }

@@ -13,7 +13,7 @@ export const createUserSchema = z.object({
     body: z.object({
         email: z.string().email("Invalid email").toLowerCase().trim(),
         name: z.string().min(1).max(255),
-        role: RoleEnum,
+        role: z.array(RoleEnum).min(1),
         profilePicture: z.string().url("Invalid URL").optional(),
         isActive: z.boolean().default(true),
     }),
@@ -22,7 +22,7 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
     body: z.object({
         name: z.string().min(1).max(255).optional(),
-        role: RoleEnum.optional(),
+        role: z.array(RoleEnum).optional(),
         profilePicture: z.string().url("Invalid URL").optional().nullable(),
         isActive: z.boolean().optional(),
     }),

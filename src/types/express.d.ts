@@ -6,9 +6,15 @@ declare global {
       name: string;
       userId: number;
       email: string;
-      role: Role;
+      role: Role[];
       isActive: boolean;
     }
+  }
+}
+
+declare module "express-serve-static-core" {
+  interface Request {
+    user?: Express.User;
   }
 }
 

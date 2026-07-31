@@ -6,7 +6,8 @@ import {
   createBookingSchema,
   bookingIdParamSchema,
   approveBookingSchema,
-  rejectBookingSchema
+  rejectBookingSchema,
+  listBookingsQuerySchema
 } from "../schemas/booking.schema.js";
 
 const bookingsRouter = Router();
@@ -14,7 +15,7 @@ const bookingsRouter = Router();
 bookingsRouter.use(authenticator);
 
 bookingsRouter.post("/", validate(createBookingSchema as any), bookingController.createBooking);
-bookingsRouter.get("/", bookingController.listBookings);
+bookingsRouter.get("/", validate(listBookingsQuerySchema as any), bookingController.listBookings);
 bookingsRouter.get("/venues/:id/schedule", bookingController.getVenueSchedule);
 bookingsRouter.get("/venues", bookingController.getAvailableVenues);
 bookingsRouter.get("/:id", validate(bookingIdParamSchema as any), bookingController.getBookingById);

@@ -38,7 +38,11 @@ export const createVenue = async (req: Request, res: Response) => {
                                 userId: true,
                                 name: true,
                                 email: true,
-                                role: true,
+                                roles: {
+                                    select: {
+                                        role: true,
+                                    },
+                                },
                             },
                         },
                     },
@@ -73,7 +77,11 @@ export const getAvailableVenues = async (req: Request, res: Response) => {
                                 userId: true,
                                 name: true,
                                 email: true,
-                                role: true,
+                                roles: {
+                                    select: {
+                                        role: true,
+                                    },
+                                },
                             },
                         },
                     },
@@ -111,7 +119,11 @@ export const getVenueById = async (req: Request, res: Response) => {
                                 userId: true,
                                 name: true,
                                 email: true,
-                                role: true,
+                                roles: {
+                                    select: {
+                                        role: true,
+                                    },
+                                },
                             },
                         },
                     },
@@ -168,7 +180,11 @@ export const updateVenue = async (req: Request, res: Response) => {
                                 userId: true,
                                 name: true,
                                 email: true,
-                                role: true,
+                                roles: {
+                                    select: {
+                                        role: true,
+                                    },
+                                },
                             },
                         },
                     },
@@ -222,16 +238,26 @@ export const addVenueHandler = async (req: Request, res: Response) => {
 
         const user = await prisma.user.findUnique({
             where: { userId: Number(handlerId) },
+            select: {
+                userId: true,
+                roles: {
+                    select: {
+                        role: true,
+                    },
+                },
+            },
         });
 
         if (!user) {
             return res.status(404).json({ error: "User not found" });
         }
 
-        if (role === "STAFF_IN_CHARGE" && user.role !== "STAFF_IN_CHARGE") {
+        const userRoles = user.roles.map((userRole) => userRole.role);
+
+        if (role === "STAFF_IN_CHARGE" && !userRoles.includes("STAFF_IN_CHARGE")) {
             return res.status(400).json({ error: "User role is not STAFF_IN_CHARGE" });
         }
-        if (role === "FACULTY_IN_CHARGE" && user.role !== "FACULTY_IN_CHARGE") {
+        if (role === "FACULTY_IN_CHARGE" && !userRoles.includes("FACULTY_IN_CHARGE")) {
             return res.status(400).json({ error: "User role is not FACULTY_IN_CHARGE" });
         }
 
@@ -259,7 +285,11 @@ export const addVenueHandler = async (req: Request, res: Response) => {
                         userId: true,
                         name: true,
                         email: true,
-                        role: true,
+                        roles: {
+                            select: {
+                                role: true,
+                            },
+                        },
                     },
                 },
             },
