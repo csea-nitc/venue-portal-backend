@@ -45,6 +45,15 @@ enum BookingStatus {
   WITHDRAWN // Added based on your earlier requirement
 }
 
+enum ActivityAction {
+  BOOKING_CREATED
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+  FORWARDED
+}
+
 // --------------------------------------
 // 2. User & Auth
 // --------------------------------------
@@ -208,16 +217,17 @@ model Booking {
 }
 
 model ActivityLog {
-  logId       Int      @id @default(autoincrement()) @map("log_id")
-  bookingId   Int      @map("booking_id")
-  action      String
-  performedBy Int      @map("performed_by")
-  timestamp   DateTime @default(now())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  logId       Int           @id @default(autoincrement()) @map("log_id")
+  bookingId   Int           @map("booking_id")
+  action      ActivityAction
+  performedBy Int           @map("performed_by")
+  role        Role?         @map("role")
+  timestamp   DateTime      @default(now())
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  booking     Booking  @relation(fields: [bookingId], references: [bookingId])
-  actor       User     @relation(fields: [performedBy], references: [userId])
+  booking     Booking       @relation(fields: [bookingId], references: [bookingId])
+  actor       User          @relation(fields: [performedBy], references: [userId])
 
   @@map("activity_logs")
 }
