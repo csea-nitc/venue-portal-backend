@@ -9,26 +9,29 @@ export const RoleEnum = z.enum([
     "ADMIN",
 ]);
 
-export const createUserSchema = z.object({
+export const createUserSchema: z.ZodType = z.object({
     body: z.object({
-        email: z.string().email("Invalid email").toLowerCase().trim(),
+        email: z.email("Invalid email").toLowerCase().trim(),
         name: z.string().min(1).max(255),
         role: z.array(RoleEnum).min(1),
-        profilePicture: z.string().url("Invalid URL").optional(),
+        profilePicture: z.url("Invalid URL").optional(),
         isActive: z.boolean().default(true),
     }),
 });
 
-export const updateUserSchema = z.object({
+export const updateUserSchema: z.ZodType = z.object({
+    params: z.object({
+        userId: z.string().regex(/^\d+$/).transform(Number)
+    }),
     body: z.object({
         name: z.string().min(1).max(255).optional(),
         role: z.array(RoleEnum).optional(),
-        profilePicture: z.string().url("Invalid URL").optional().nullable(),
+        profilePicture: z.url("Invalid URL").optional().nullable(),
         isActive: z.boolean().optional(),
     }),
 });
 
-export const userIdSchema = z.object({
+export const userIdSchema: z.ZodType = z.object({
     params: z.object({
         userId: z.string().regex(/^\d+$/).transform(Number),
     }),

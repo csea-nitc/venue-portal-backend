@@ -30,55 +30,61 @@ adminRouter.get("/dashboard", (req, res) => {
 
 adminRouter.post(
     "/users",
-    validate(createUserSchema as any),
+    validate(createUserSchema),
     userController.createUser,
 );
-adminRouter.get("/users", userController.getAllUsers);
+adminRouter.get(
+    "/users", 
+    userController.getAllUsers
+);
 adminRouter.get(
     "/users/:userId",
-    validate(userIdSchema as any),
+    validate(userIdSchema),
     userController.getUserById,
 );
 adminRouter.put(
     "/users/:userId",
-    validate(userIdSchema.merge(updateUserSchema) as any),
+    validate(updateUserSchema),
     userController.updateUserById,
 );
 adminRouter.delete(
     "/users/:userId",
-    validate(userIdSchema as any),
+    validate(userIdSchema),
     userController.deleteUserById,
 );
 
 adminRouter.post(
     "/venues",
-    validate(createVenueSchema as any),
+    validate(createVenueSchema),
     venueController.createVenue,
 );
-adminRouter.get("/venues", venueController.getAvailableVenues);
+adminRouter.get(
+    "/venues", 
+    venueController.getAvailableVenues
+);
 adminRouter.get(
     "/venues/:venueId",
-    validate(venueIdSchema as any),
+    validate(venueIdSchema),
     venueController.getVenueById,
 );
 adminRouter.put(
     "/venues/:venueId",
-    validate(venueIdSchema.merge(updateVenueSchema) as any),
+    validate(venueIdSchema.merge(updateVenueSchema)),
     venueController.updateVenue,
 );
 adminRouter.delete(
     "/venues/:venueId",
-    validate(venueIdSchema as any),
+    validate(venueIdSchema),
     venueController.deleteVenue,
 );
 adminRouter.post(
     "/venues/:venueId/handlers",
-    validate(addVenueHandlerSchema as any),
+    validate(addVenueHandlerSchema),
     venueController.addVenueHandler,
 );
 adminRouter.delete(
     "/venues/:venueId/handlers/:handlerId",
-    validate(removeVenueHandlerSchema as any),
+    validate(removeVenueHandlerSchema),
     venueController.removeVenueHandler,
 );
 

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "../generated/prisma/client.js";
+import { PrismaClient, Role } from "../generated/prisma/client.js";
 
 const prisma = new PrismaClient();
 
@@ -104,24 +104,62 @@ export const getUserById = async (req: Request, res: Response) => {
 export const updateUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
+        const userIdNumber = Number(userId);
         const { name, roles, profilePicture, isActive } = req.body;
 
-        console.log("Update User Request Body:", req.body); // Debugging line
+        console.log(typeof userId);
+        console.log(userId);
 
         const updates: any = {};
         if (name !== undefined) updates.name = name;
         if (roles !== undefined) {
+            const currentUser = await prisma.user.findUnique({
+                where: { userId: userIdNumber },
+                select: {
+                    roles: {
+                        select: {
+                            role: true,
+                        },
+                    },
+                },
+            });
+
+            if (!currentUser) {
+                return res.status(404).json({ error: "User not found" });
+            }
+
+            const currentRoles = currentUser.roles.map((userRole: { role: Role }) => userRole.role);
+            const requestedRoles = roles as Role[];
+            const droppedRoles = currentRoles.filter((role: Role) => !requestedRoles.includes(role));
+
+            if (droppedRoles.length > 0) {
+                const conflictingHandler = await prisma.bookingHandler.findFirst({
+                    where: {
+                        handlerId: userIdNumber,
+                        handlerRole: {
+                            in: droppedRoles,
+                        },
+                    },
+                });
+
+                if (conflictingHandler) {
+                    return res.status(409).json({
+                        error: "Cannot remove role while it is still assigned to a booking workflow handler",
+                        details: `The following roles are still referenced by booking handlers: ${droppedRoles.join(", ")}`,
+                    });
+                }
+            }
+
             updates.roles = {
                 deleteMany: {},
-                create: roles.map((userRole: string) => ({ role: userRole })),
+                create: requestedRoles.map((userRole: string) => ({ role: userRole })),
             };
         }
-        if (profilePicture !== undefined)
-            updates.profilePicture = profilePicture;
+        if (profilePicture !== undefined) updates.profilePicture = profilePicture;
         if (isActive !== undefined) updates.isActive = isActive;
 
         const user = await prisma.user.update({
-            where: { userId: Number(userId) },
+            where: { userId: userIdNumber },
             data: updates,
         });
 
