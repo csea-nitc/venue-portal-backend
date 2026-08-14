@@ -1,5 +1,5 @@
 import { PrismaClient, BookingStatus } from "../generated/prisma/client.js";
-import { Role } from "../generated/prisma/enums.js";
+import { ActivityAction, Role } from "../generated/prisma/enums.js";
 
 const prisma = new PrismaClient();
 
@@ -88,8 +88,9 @@ export class WorkflowService {
 				await tx.activityLog.create({
 					data: {
 						bookingId,
+						action: ActivityAction.FORWARDED,
 						performedBy: approverId,
-						action: `APPROVED BY COORDINATOR: ${user.name}. Forwarded to Venue Handler. Remarks: ${remarks}`,
+						role: Role.FACULTY_COORDINATOR,
 						timestamp: new Date(),
 					},
 				});
@@ -138,8 +139,9 @@ export class WorkflowService {
 				await tx.activityLog.create({
 					data: {
 						bookingId,
+						action: ActivityAction.APPROVED,
 						performedBy: approverId,
-						action: `APPROVED BY STAFF IN-CHARGE: ${user.name}. Remarks: ${remarks}`,
+						role: Role.STAFF_IN_CHARGE,
 						timestamp: new Date(),
 					},
 				});
@@ -194,7 +196,8 @@ export class WorkflowService {
 						data: {
 							bookingId,
 							performedBy: approverId,
-							action: `APPROVED BY FACULTY IN-CHARGE: ${user.name}. Forwarded to HOD. Remarks: ${remarks}`,
+							action: ActivityAction.FORWARDED,
+							role: Role.FACULTY_IN_CHARGE,
 							timestamp: new Date(),
 						},
 					});
@@ -213,7 +216,8 @@ export class WorkflowService {
 						data: {
 							bookingId,
 							performedBy: approverId,
-							action: `APPROVED BY FACULTY IN-CHARGE: ${user.name}. Remarks: ${remarks}`,
+							action: ActivityAction.APPROVED,
+							role: Role.FACULTY_IN_CHARGE,
 							timestamp: new Date(),
 						},
 					});
@@ -243,7 +247,8 @@ export class WorkflowService {
 					data: {
 						bookingId,
 						performedBy: approverId,
-						action: `FINAL APPROVAL BY HOD: ${user.name}. Remarks: ${remarks}`,
+						action: ActivityAction.APPROVED,
+						role: Role.HOD,
 						timestamp: new Date(),
 					},
 				});
@@ -288,6 +293,14 @@ export class WorkflowService {
 				where: { userId: rejecterId },
 			});
 
+			// 0. Get the role of rejecter
+			const rejecterRole = await tx.bookingHandler.findFirst({
+				where: {
+					bookingId,
+					handlerId: rejecterId,
+				}
+			});
+
 			// 1. Clear current handlers
 			await tx.bookingHandler.deleteMany({
 				where: { bookingId },
@@ -303,7 +316,8 @@ export class WorkflowService {
 				data: {
 					bookingId,
 					performedBy: rejecterId,
-					action: `REJECTED BY ${user.name}: ${reason}`,
+					action: ActivityAction.REJECTED,
+					role: rejecterRole.handlerRole,
 					timestamp: new Date(),
 				},
 			});
