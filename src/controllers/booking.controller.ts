@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
 
 export const createBooking = async (req: Request, res: Response) => {
   try {
-    const { venueId, eventName, eventStart, eventEnd, initialHandlerId } = req.body;
+    const { venueId, eventName, eventStart, eventEnd, description, initialHandlerId } = req.body;
     const clubId = req.user?.userId;
 
     if (!clubId) {
@@ -51,6 +51,7 @@ export const createBooking = async (req: Request, res: Response) => {
         eventName,
         eventStart: new Date(eventStart),
         eventEnd: new Date(eventEnd),
+        description,
         status: BookingStatus.PENDING_COORDINATOR,
         currentHandlers: {
           create: {

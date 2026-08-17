@@ -194,6 +194,7 @@ model Booking {
   eventName         String        @map("event_name")
   eventStart        DateTime      @map("event_start")
   eventEnd          DateTime      @map("event_end")
+  description       String?       @map("description")
   status            BookingStatus @default(PENDING_COORDINATOR)
   
   // Workflow Logic
