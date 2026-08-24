@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient, BookingStatus } from "../generated/prisma/client.js";
-import { Role } from "../generated/prisma/enums.js";
+import { ActivityAction, Role } from "../generated/prisma/enums.js";
 import { getApprovedConflict } from "../services/booking.service.js";
 import { WorkflowService } from "../services/workflow.service.js";
 import {
@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
 
 export const createBooking = async (req: Request, res: Response) => {
   try {
-    const { venueId, eventName, eventStart, eventEnd, description, initialHandlerId } = req.body;
+    const { venueId, eventName, eventStart, eventEnd, description } = req.body;
     const clubId = req.user?.userId;
 
     if (!clubId) {
@@ -41,32 +41,45 @@ export const createBooking = async (req: Request, res: Response) => {
       });
     }
     // club's coordinator
-    const handlerId = initialHandlerId || clubProfile.facultyCoordinatorId;
+    const handlerId = clubProfile.facultyCoordinatorId;
 
 
-    const booking = await prisma.booking.create({
-      data: {
-        clubId,
-        venueId,
-        eventName,
-        eventStart: new Date(eventStart),
-        eventEnd: new Date(eventEnd),
-        description,
-        status: BookingStatus.PENDING_COORDINATOR,
-        currentHandlers: {
-          create: {
-            handlerId,
-            handlerRole: Role.FACULTY_COORDINATOR
+    const booking = await prisma.$transaction(async (tx) => {
+      const createdBooking = await tx.booking.create({
+        data: {
+          clubId,
+          venueId,
+          eventName,
+          eventStart: new Date(eventStart),
+          eventEnd: new Date(eventEnd),
+          description,
+          status: BookingStatus.PENDING_COORDINATOR,
+          currentHandlers: {
+            create: {
+              handlerId,
+              handlerRole: Role.FACULTY_COORDINATOR
+            }
+          }
+        },
+        include: {
+          currentHandlers: {
+            include: {
+              handler: true
+            }
           }
         }
-      },
-      include: {
-        currentHandlers: {
-          include: {
-            handler: true
-          }
+      });
+
+      await tx.activityLog.create({
+        data: {
+          bookingId: createdBooking.bookingId,
+          performedBy: clubId,
+          action: ActivityAction.BOOKING_CREATED,
+          role: Role.CLUB
         }
-      }
+      });
+
+      return createdBooking;
     });
 
     // --- EMAIL NOTIFICATION ---
@@ -240,27 +253,37 @@ export const listBookings = async (req: Request, res: Response) => {
 
     if (requestedRole === "HOD" || requestedRole === "ADMIN") {
       whereClause = {};
-    } else if (requestedRole === "STAFF_IN_CHARGE" || requestedRole === "FACULTY_IN_CHARGE") {
-      const managedVenues = await prisma.venueHandler.findMany({
-        where: { handlerId: user.userId, isActive: true },
-        select: { venueId: true }
-      });
-      const managedVenueIds = managedVenues.map(vh => vh.venueId);
-
-      whereClause.OR = [
-        { currentHandlers: { some: { handlerId: user.userId } } },
-        {
-          venueId: { in: managedVenueIds },
-          status: { in: [BookingStatus.PENDING_STAFF, BookingStatus.PENDING_FACULTY] }
+    } 
+    else {
+      // Get distinct booking IDs from ActivityLog where performedBy is this user and role matches
+      const activityLogs = await prisma.activityLog.findMany({
+        where: {
+          performedBy: user.userId,
+          role: requestedRole as Role
+        },
+        distinct: ['bookingId'],
+        select: {
+          bookingId: true
         }
-      ];
-    } else if (requestedRole === "FACULTY_COORDINATOR") {
-      whereClause.OR = [
-        { currentHandlers: { some: { handlerId: user.userId } } },
-        { club: { facultyCoordinatorId: user.userId } }
-      ];
-    } else if (requestedRole === "CLUB") {
-      whereClause.clubId = user.userId;
+      });
+
+      const currentHandlers = await prisma.bookingHandler.findMany({
+        where: {
+          handlerId: user.userId,
+          handlerRole: requestedRole as Role
+        },
+        distinct: ['bookingId'],
+        select: {
+          bookingId: true
+        }
+      });
+
+      
+      const bookingIdsFromHandlers = currentHandlers.map(ch => ch.bookingId);
+      const bookingIdsFromLogs = activityLogs.map(log => log.bookingId);
+
+      // Filter by those booking IDs
+      whereClause.bookingId = { in: [...bookingIdsFromHandlers, ...bookingIdsFromLogs] };
     }
 
     const bookings = await prisma.booking.findMany({
@@ -275,9 +298,6 @@ export const listBookings = async (req: Request, res: Response) => {
                 userId: true,
                 name: true,
                 email: true,
-                roles: {
-                  select: { role: true }
-                }
               }
             }
           }
@@ -286,7 +306,18 @@ export const listBookings = async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" }
     });
 
-    return res.json({ success: true, data: bookings });
+    // Add pendingOnMe flag based on BookingHandler
+    const enrichedBookings = bookings.map(booking => {
+      const isPendingOnMe = booking.currentHandlers.some(
+        handler => handler.handlerId === user.userId && handler.handlerRole === requestedRole
+      );
+      return {
+        ...booking,
+        pendingOnMe: isPendingOnMe
+      };
+    });
+
+    return res.json({ success: true, data: enrichedBookings });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
