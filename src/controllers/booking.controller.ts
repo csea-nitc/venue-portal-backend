@@ -229,7 +229,6 @@ export const rejectBooking = async (req: Request, res: Response) => {
   }
 };
 
-
 export const listBookings = async (req: Request, res: Response) => {
   const user = req.user;
   if (!user) {
@@ -306,16 +305,52 @@ export const listBookings = async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" }
     });
 
+  
     // Add pendingOnMe flag based on BookingHandler
-    const enrichedBookings = bookings.map(booking => {
+    // const enrichedBookings = bookings.map(booking => {
+    //   const isPendingOnMe = booking.currentHandlers.some(
+    //     handler => handler.handlerId === user.userId && handler.handlerRole === requestedRole
+    //   );
+    //   return {
+    //     ...booking,
+    //     pendingOnMe: isPendingOnMe
+    //   };
+    // });
+
+    // Enrich bookings with pendingOnMe flag and booking lifecycle logs from ActivityLog
+    const enrichedBookings = await Promise.all(bookings.map(async (booking) => {
       const isPendingOnMe = booking.currentHandlers.some(
         handler => handler.handlerId === user.userId && handler.handlerRole === requestedRole
       );
+
+      const lifecycleLogs = await prisma.activityLog.findMany({
+        where: { bookingId: booking.bookingId },
+        include: {
+          actor: {
+            select: {
+              userId: true,
+              name: true,
+              email: true,
+            }
+          }
+        },
+        orderBy: { timestamp: "asc" }
+      });
+
+      const enhancedLogs = lifecycleLogs.map(log => ({
+        name: log.actor.name,
+        email: log.actor.email,
+        role: log.role,
+        action: log.action,
+        timestamp: log.timestamp,
+      }));
+
       return {
         ...booking,
-        pendingOnMe: isPendingOnMe
+        pendingOnMe: isPendingOnMe,
+        logs: enhancedLogs
       };
-    });
+    }));
 
     return res.json({ success: true, data: enrichedBookings });
   } catch (error: any) {

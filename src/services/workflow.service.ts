@@ -88,7 +88,7 @@ export class WorkflowService {
 				await tx.activityLog.create({
 					data: {
 						bookingId,
-						action: ActivityAction.FORWARDED,
+						action: ActivityAction.APPROVED,
 						performedBy: approverId,
 						role: Role.FACULTY_COORDINATOR,
 						timestamp: new Date(),
