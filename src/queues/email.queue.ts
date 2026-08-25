@@ -67,9 +67,7 @@ export async function addEmailJob(
   name: string,
   payload: SendEmailPayload,
 ): Promise<EmailJobResult> {
-  // const job = await emailQueue.add(name, payload);
-  // console.log(`[email-queue] Job "${name}" enqueued — id: ${job.id}`);
-  // return { queued: true, jobId: job.id! };
-  console.log(`[email-queue] Suppressed job "${name}" (email notifications temporarily disabled)`);
-  return { queued: true, jobId: 'mock-job-id' };
+  const job = await emailQueue.add(name, payload);
+  console.log(`[email-queue] Job "${name}" enqueued — id: ${job.id}`);
+  return { queued: true, jobId: String(job.id) };
 }
