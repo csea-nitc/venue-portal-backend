@@ -78,7 +78,7 @@ authRouter.get("/refresh", (req: Request, res: Response) => {
     const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
-        return res.status(401).send("Refresh Token Not Found");
+        return res.status(401).json({ message: "Refresh Token Not Found" });
     }
 
     jwt.verify(
@@ -86,48 +86,79 @@ authRouter.get("/refresh", (req: Request, res: Response) => {
         process.env.REFRESH_TOKEN_SECRET!,
         async (err: any, decoded: any) => {
             if (err) {
-                return res.status(403).send("Invalid Refresh Token");
+                res.clearCookie('refreshToken');
+                return res.status(403).json({ message: "Invalid Refresh Token" });
             }
 
-            const session = await prisma.session.findFirst({
-                where: {
-                    userId: decoded.userId,
-                    refreshToken: refreshToken
-                },
-                include: {
-                    user: {
-                        select: {
-                            userId: true,
-                            email: true,
-                            name: true,
-                            roles: {
-                                select: {
-                                    role: true
+            try {
+                const session = await prisma.session.findFirst({
+                    where: {
+                        userId: decoded.userId,
+                        refreshToken: refreshToken
+                    },
+                    include: {
+                        user: {
+                            select: {
+                                userId: true,
+                                email: true,
+                                name: true,
+                                roles: {
+                                    select: {
+                                        role: true
+                                    }
                                 }
                             }
                         }
                     }
+                });
+
+                if (!session || (session.expiresAt && session.expiresAt < new Date())) {
+                    res.clearCookie('refreshToken');
+                    return res.status(403).json({ message: "Session Not Found or Expired" });
                 }
-            });
 
-            if (!session) {
-                return res.status(403).send("Session Not Found");
+                const normalizedUser = {
+                    userId: session.user.userId,
+                    email: session.user.email,
+                    name: session.user.name,
+                    roles: session.user.roles,
+                    role: session.user.roles.map((r: any) => r.role)
+                };
+
+                const newAuthToken = jwt.sign(
+                    normalizedUser,
+                    process.env.JWT_SECRET!,
+                    { expiresIn: '1h' }
+                );
+
+                return res.json({
+                    token: newAuthToken
+                });
+            } catch (dbError) {
+                console.error("Error refreshing token session:", dbError);
+                return res.status(500).json({ message: "Internal server error during refresh" });
             }
-
-            const newAuthToken = jwt.sign(
-                { userId: decoded.userId },
-                process.env.JWT_SECRET!,
-                { expiresIn: '1h' }
-            );
-
-            res.json({
-                token: newAuthToken
-            });
         }
     );
-
-    // return res.status(200); sync code error
 });
 
+authRouter.post("/logout", async (req: Request, res: Response) => {
+    const refreshToken = req.cookies.refreshToken;
+    if (refreshToken) {
+        try {
+            await prisma.session.deleteMany({
+                where: { refreshToken }
+            });
+        } catch (error) {
+            console.error("Error clearing session on logout:", error);
+        }
+    }
+    res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
+    });
+    return res.json({ message: "Logged out successfully" });
+});
 
 export default authRouter;

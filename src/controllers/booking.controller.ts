@@ -424,6 +424,13 @@ export const getAvailableVenues = async (req: Request, res: Response) => {
         location: true,
         capacity: true,
         isAvailable: true,
+        handlers: {
+          select: {
+            handlerId: true,
+            role: true,
+            isActive: true,
+          }
+        }
       }
     });
     return res.json({ success: true, venues });
@@ -445,9 +452,29 @@ export const getVenueSchedule = async (req: Request, res: Response) => {
       select: {
         bookingId: true,
         clubId: true,
+        eventName: true,
+        description: true,
         eventStart: true,
         eventEnd: true,
-        status: true
+        status: true,
+        createdAt: true,
+        club: {
+          select: {
+            clubName: true,
+            user: {
+              select: {
+                name: true,
+                email: true,
+              }
+            }
+          }
+        },
+        currentHandlers: {
+          select: {
+            handlerId: true,
+            handlerRole: true,
+          }
+        }
       }
     });
 
